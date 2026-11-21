@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14202e">
+<title>Vetta – riconosci i monti</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=Barlow:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --panel:rgba(20,32,46,.86);--text:#f4f6f8;--muted:#a9b6c4;--cai:#c8102e;--snow:#ffffff;
+  --font:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --cond:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  color-scheme:dark;box-sizing:border-box;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){--panel:rgba(250,251,252,.92);--text:#14202e;--muted:#4b5b6b;color-scheme:light}
+}
+*,*::before,*::after{box-sizing:inherit}
+html,body{height:100%;margin:0;background:#14202e;color:var(--text);font-family:var(--font);overflow:hidden;-webkit-user-select:none;user-select:none}
+#cam,#view{position:fixed;inset:0;width:100%;height:100%}
+#cam{object-fit:cover;background:#14202e}
+#view{touch-action:none}
+#top{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;gap:8px;
+  padding:calc(env(safe-area-inset-top,0px) + 8px) 10px 8px;background:var(--panel);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:5}
+#brand{font-family:var(--cond);font-weight:700;font-size:20px;letter-spacing:.02em;display:flex;align-items:center;gap:6px}
+#brand i{display:inline-block;width:18px;height:12px;background:linear-gradient(var(--cai) 33%,var(--snow) 33% 66%,var(--cai) 66%);border-radius:2px}
+#status{flex:1;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+button,select{font:inherit;color:inherit}
+.ib{border:0;background:transparent;font-size:20px;width:40px;height:40px;border-radius:10px;cursor:pointer}
+.ib:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--cai);outline-offset:2px}
+#info{position:fixed;left:0;right:0;bottom:0;padding:10px 14px calc(env(safe-area-inset-bottom,0px) + 12px);background:var(--panel);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:5;min-height:72px}
+#infoName{font-family:var(--cond);font-weight:700;font-size:24px;line-height:1.1}
+#infoSub{font-size:14px;color:var(--muted);margin-top:2px}
+#start,#settings{position:fixed;inset:0;z-index:10;display:flex;align-items:flex-end;justify-content:center;background:rgba(10,16,24,.55)}
+#start[hidden],#settings[hidden],#cam[hidden]{display:none}
+.sheet{width:100%;max-width:520px;background:var(--panel);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border-radius:18px 18px 0 0;padding:22px 20px calc(env(safe-area-inset-bottom,0px) + 22px)}
+.sheet h1{font-family:var(--cond);font-size:34px;margin:0 0 6px;line-height:1}
+.sheet p{margin:0 0 16px;color:var(--muted);line-height:1.45;font-size:15px}
+.btn{display:block;width:100%;padding:14px;border:0;border-radius:12px;font-weight:600;font-size:16px;cursor:pointer;margin-top:10px}
+.btn.main{background:var(--cai);color:#fff}
+.btn.alt{background:transparent;border:2px solid var(--muted)}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid rgba(128,140,155,.25);font-size:15px}
+.row input[type=range]{flex:1;max-width:55%}
+.row output{min-width:44px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+#toast{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 70px);background:var(--panel);padding:10px 14px;border-radius:10px;font-size:14px;z-index:8;max-width:90%;text-align:center}
+#toast[hidden]{display:none}
+</style>
+</head>
+<body>
+<video id="cam" playsinline muted autoplay hidden></video>
+<canvas id="view"></canvas>
+
+<header id="top">
+  <div id="brand"><i></i>Vetta</div>
+  <div id="status">In attesa</div>
+  <button class="ib" id="modeBtn" aria-label="Cambia modalità" title="Fotocamera / senza visibilità">🧭</button>
+  <button class="ib" id="setBtn" aria-label="Impostazioni">⚙︎</button>
+</header>
+
+<footer id="info">
+  <div id="infoName">Punta il telefono verso i monti</div>
+  <div id="infoSub">Tocca un nome per vederne i dettagli</div>
+</footer>
+
+<div id="toast" hidden></div>
+
+<div id="start">
+  <div class="sheet">
+    <h1>Vetta</h1>
+    <p>Riconosce i monti usando la tua posizione e la direzione in cui punti il telefono. Con nebbia o foschia usa la vista senza fotocamera: il panorama viene disegnato dai dati.</p>
+    <button class="btn main" id="goCam">Inquadra con la fotocamera</button>
+    <button class="btn alt" id="goLow">Scarsa visibilità</button>
+  </div>
+</div>
+
+<div id="settings" hidden>
+  <div class="sheet">
+    <div class="row"><label for="radius">Raggio di ricerca</label>
+      <select id="radius"><option value="25">25 km</option><option value="50">50 km</option><option value="100">100 km</option><option value="150">150 km</option></select></div>
+    <div class="row"><label for="fov">Campo visivo fotocamera</label><input type="range" id="fov" min="30" max="90" step="1"><output id="fovO"></output></div>
+    <div class="row"><label for="offset">Correzione bussola</label><input type="range" id="offset" min="-45" max="45" step="1"><output id="offsetO"></output></div>
+    <div class="row"><label for="offsetV">Correzione orizzonte</label><input type="range" id="offsetV" min="-10" max="10" step="0.5"><output id="offsetVO"></output></div>
+    <div class="row"><label for="occl">Nascondi vette coperte</label><input type="checkbox" id="occl"></div>
+    <div class="row"><label for="manual">Ruota a mano (trascina)</label><input type="checkbox" id="manual"></div>
+    <button class="btn main" id="closeSet">Fatto</button>
+  </div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const toR=Math.PI/180,toD=180/Math.PI,EARTH=6371000,REFR=0.13,SLOPE=0.4;
+const OVERPASS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
+const cv=$('#view'),ctx=cv.getContext('2d'),vid=$('#cam');
+
+const cfg=Object.assign({radius:50,fov:55,offset:0,offsetV:0,occl:true},load('vetta-cfg')||{});
+const S={lat:null,lon:null,acc:null,gpsAlt:null,ground:null,heading:null,pitch:0,lastH:null,
+  mode:'cam',manual:false,raw:null,all:[],peaks:[],placed:[],sel:null,hf:55,status:''};
+let stream=null,hx=null,hy=null,hasAbs=false;
+
+function load(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}}
+function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+
+/* ---------- geometria ---------- */
+function dist(a,b,c,d){const p1=a*toR,p2=c*toR,dp=(c-a)*toR,dl=(d-b)*toR;
+  const h=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;return 2*EARTH*Math.asin(Math.sqrt(h))}
+function bearing(a,b,c,d){const p1=a*toR,p2=c*toR,dl=(d-b)*toR;
+  const y=Math.sin(dl)*Math.cos(p2),x=Math.cos(p1)*Math.sin(p2)-Math.sin(p1)*Math.cos(p2)*Math.cos(dl);
+  return (Math.atan2(y,x)*toD+360)%360}
+function angDiff(a,b){return ((a-b+540)%360)-180}
+function card(b){return ['N','NE','E','SE','S','SO','O','NO'][Math.round(b/45)%8]}
+function km(m){return m<1000?Math.round(m)+' m':(m/1000).toLocaleString('it-IT',{maximumFractionDigits:1})+' km'}
+function parseEle(s){const v=parseFloat(String(s).replace(',','.'));return isFinite(v)?v:null}
+function obsAlt(){return (S.ground??S.gpsAlt??0)+1.6}
+
+/* ---------- orientamento ---------- */
+function onOri(e,src){
+  if(e.beta==null)return;
+  const a=(e.alpha||0)*toR,b=e.beta*toR,g=(e.gamma||0)*toR;
+  const cA=Math.cos(a),sA=Math.sin(a),cB=Math.cos(b),sB=Math.sin(b),cG=Math.cos(g),sG=Math.sin(g);
+  const m13=cG*sA*sB+cA*sG,m23=sA*sG-cA*cG*sB,m33=cB*cG,m12=-cB*sA,m22=cA*cB;
+  const pitch=Math.asin(Math.max(-1,Math.min(1,-m33)))*toD; // inclinazione dell'asse fotocamera
+  S.pitch=S.pitch*.85+pitch*.15;
+  let h=null;
+  if(src==='ios')h=e.webkitCompassHeading;
+  else if(src==='abs'){
+    h=pitch<-50 ? Math.atan2(m12,m22)*toD+(screen.orientation?.angle||0) // telefono in piano: direzione del bordo superiore
+                : Math.atan2(-m13,-m23)*toD;                              // telefono in piedi: direzione della fotocamera
+  }
+  if(h!=null&&!S.manual)smoothHeading((h+360)%360);
+}
+function smoothHeading(h){const r=h*toR;
+  if(hx==null){hx=Math.cos(r);hy=Math.sin(r)}else{hx=hx*.85+Math.cos(r)*.15;hy=hy*.85+Math.sin(r)*.15}
+  S.heading=(Math.atan2(hy,hx)*toD+360)%360;S.lastH=Date.now()}
+function initOrientation(){
+  if('ondeviceorientationabsolute' in window)
+    addEventListener('deviceorientationabsolute',e=>{hasAbs=true;onOri(e,'abs')});
+  addEventListener('deviceorientation',e=>{
+    if(e.webkitCompassHeading!=null)onOri(e,'ios');
+    else if(!hasAbs)onOri(e,e.absolute?'abs':'rel');
+  });
+}
+
+/* ---------- posizione e dati ---------- */
+function initGeo(){
+  if(!navigator.geolocation){S.status='Posizione non disponibile';return}
+  navigator.geolocation.watchPosition(onPos,err=>{S.status='GPS: '+err.message},
+    {enableHighAccuracy:true,maximumAge:5000,timeout:20000});
+}
+async function onPos(p){
+  const {latitude:lat,longitude:lon,accuracy:acc,altitude:alt,altitudeAccuracy:aa}=p.coords;
+  const moved=S.lat==null||dist(S.lat,S.lon,lat,lon)>1500;
+  S.lat=lat;S.lon=lon;S.acc=acc;
+  if(alt!=null&&aa!=null&&aa<25)S.gpsAlt=alt;
+  if(moved){await fetchGround();await loadPeaks()}
+}
+async function fetchGround(){
+  try{const r=await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${S.lat}&longitude=${S.lon}`);
+    const j=await r.json();if(isFinite(j.elevation?.[0]))S.ground=j.elevation[0]}catch(e){}
+}
+async function loadPeaks(){
+  const c=load('vetta-peaks');
+  if(c&&c.r===cfg.radius&&Date.now()-c.t<30*864e5&&dist(c.lat,c.lon,S.lat,S.lon)<3000){S.raw=c.e;recompute();return}
+  S.status='Scarico le vette…';
+  const q=`[out:json][timeout:60];node["natural"~"^(peak|volcano)$"]["name"]["ele"](around:${cfg.radius*1000},${S.lat},${S.lon});out;`;
+  let els=null;
+  for(const url of OVERPASS){
+    try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(q)});
+      if(!r.ok)throw new Error(r.status);
+      const j=await r.json();
+      els=j.elements.map(n=>[n.lat,n.lon,n.tags.name,parseEle(n.tags.ele)]).filter(x=>x[3]!=null);break;
+    }catch(e){}
+  }
+  if(!els){S.status='Vette non scaricate: controlla la connessione';return}
+  save('vetta-peaks',{t:Date.now(),lat:S.lat,lon:S.lon,r:cfg.radius,e:els});
+  S.raw=els;recompute();
+}
+function recompute(){
+  if(!S.raw||S.lat==null)return;
+  const h0=obsAlt();
+  const list=[];
+  for(const [la,lo,name,ele] of S.raw){
+    const d=dist(S.lat,S.lon,la,lo);if(d<150)continue;
+    const drop=d*d/(2*EARTH)*(1-REFR); // curvatura terrestre e rifrazione
+    list.push({name,ele,d,b:bearing(S.lat,S.lon,la,lo),el:Math.atan2(ele-h0-drop,d)*toD,hidden:false});
+  }
+  list.sort((a,b)=>a.d-b.d);
+  // occlusione approssimata: ogni vetta più vicina è un cono con pendenza angolare SLOPE
+  for(let i=0;i<list.length;i++){const p=list[i];
+    for(let j=0;j<i;j++){const q=list[j];const db=Math.abs(angDiff(p.b,q.b));
+      if(db<12&&p.el<q.el-SLOPE*db-0.05){p.hidden=true;break}}}
+  S.all=list;S.peaks=cfg.occl?list.filter(p=>!p.hidden):list;
+}
+
+/* ---------- fotocamera ---------- */
+async function startCam(){
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
+    vid.srcObject=stream;vid.hidden=false;await vid.play().catch(()=>{});
+  }catch(e){toast('Fotocamera non disponibile: passo alla vista senza visibilità');setMode('low')}
+}
+function stopCam(){stream?.getTracks().forEach(t=>t.stop());stream=null;vid.hidden=true}
+function setMode(m){
+  S.mode=m;$('#modeBtn').textContent=m==='cam'?'🧭':'📷';
+  if(m==='cam'){if(!stream)startCam()}else stopCam();
+}
+
+/* ---------- disegno ---------- */
+function draw(){
+  const dpr=devicePixelRatio||1,W=innerWidth,H=innerHeight;
+  if(cv.width!==Math.round(W*dpr)||cv.height!==Math.round(H*dpr)){cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr)}
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
+  const low=S.mode==='low';
+  const head=((S.heading??0)+cfg.offset+360)%360;
+  const hf=low?80:cfg.fov;S.hf=hf;
+  const topY=$('#top').getBoundingClientRect().bottom+8;
+  const stripY=$('#info').getBoundingClientRect().top-30;
+
+  let xOf,yOf,horizon;
+  if(low){
+    const ppd=W/hf,ex=3;horizon=topY+(stripY-topY)*0.72;
+    xOf=dt=>W/2+dt*ppd; yOf=el=>horizon-el*ppd*ex;
+    drawLandscape(W,H,head,hf,xOf,yOf,horizon,stripY,ppd*ex);
+  }else{
+    const tH=Math.tan(hf/2*toR),tV=tH*H/W,pitch=S.pitch+cfg.offsetV;
+    xOf=dt=>Math.abs(dt)>80?NaN:W/2+Math.tan(dt*toR)/tH*W/2;
+    yOf=el=>H/2-Math.tan((el-pitch)*toR)/tV*H/2;
+    horizon=yOf(0);
+    ctx.setLineDash([6,6]);ctx.strokeStyle='rgba(255,255,255,.35)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(0,horizon);ctx.lineTo(W,horizon);ctx.stroke();ctx.setLineDash([]);
+    ctx.strokeStyle='rgba(255,255,255,.25)';ctx.beginPath();ctx.moveTo(W/2,topY);ctx.lineTo(W/2,stripY);ctx.stroke();
+  }
+
+  // vette nel campo visivo
+  const vis=[];
+  for(const p of S.peaks){const dt=angDiff(p.b,head);if(Math.abs(dt)>hf/2+2)continue;
+    const x=xOf(dt),y=yOf(p.el);if(!isFinite(x))continue;vis.push({p,dt,x,y})}
+  vis.sort((a,b)=>b.p.ele-a.p.ele);
+
+  // posizionamento etichette su righe senza sovrapposizioni
+  const rowH=38,rows=[],placed=[];
+  const maxRows=Math.max(1,Math.floor((stripY-topY)*0.55/rowH));
+  for(const v of vis){
+    if(placed.length>=40)break;
+    ctx.font='700 16px '+getComputedStyle(document.documentElement).getPropertyValue('--cond');
+    const w=Math.max(ctx.measureText(v.p.name).width,70)+12;
+    let r=0,ok=false;
+    for(;r<maxRows;r++){const y=topY+r*rowH;if(y+rowH>v.y-4)break;
+      if(!(rows[r]||[]).some(([a,b])=>v.x-w/2<b&&v.x+w/2>a)){ok=true;break}}
+    if(!ok)continue;
+    (rows[r]=rows[r]||[]).push([v.x-w/2,v.x+w/2]);placed.push({...v,w,y0:topY+r*rowH});
+  }
+  S.placed=placed;
+
+  // vetta al centro
+  let center=null;for(const v of vis)if(Math.abs(v.dt)<4&&(!center||Math.abs(v.dt)<Math.abs(center.dt)))center=v;
+  const focus=S.sel?vis.find(v=>v.p===S.sel)||null:center;
+
+  for(const v of placed){
+    const hot=focus&&v.p===focus.p;
+    ctx.strokeStyle=hot?'#c8102e':'rgba(255,255,255,.9)';ctx.lineWidth=hot?2.5:1.2;
+    ctx.beginPath();ctx.moveTo(v.x,v.y0+rowH-6);ctx.lineTo(v.x,v.y);ctx.stroke();
+    ctx.fillStyle=hot?'#c8102e':'#fff';ctx.beginPath();ctx.arc(v.x,v.y,hot?4.5:3,0,7);ctx.fill();
+    // cartello stile segnavia: barra rossa sopra il nome
+    ctx.fillStyle='#c8102e';ctx.fillRect(v.x-v.w/2+6,v.y0,v.w-12,3);
+    label(v.p.name,v.x,v.y0+19,'700 16px "Barlow Condensed","Arial Narrow",sans-serif','#fff');
+    label(Math.round(v.p.ele)+' m · '+km(v.p.d),v.x,v.y0+32,'500 12px Barlow,system-ui,sans-serif','rgba(255,255,255,.85)');
+  }
+  drawStrip(W,head,hf,xOf,stripY);
+  updateInfo(focus,head);
+}
+function label(s,x,y,font,fill){ctx.font=font;ctx.textAlign='center';ctx.lineJoin='round';
+  ctx.lineWidth=3.5;ctx.strokeStyle='rgba(10,16,24,.8)';ctx.strokeText(s,x,y);ctx.fillStyle=fill;ctx.fillText(s,x,y)}
+
+function drawLandscape(W,H,head,hf,xOf,yOf,horizon,stripY,pxPerDegY){
+  const sky=ctx.createLinearGradient(0,0,0,horizon);sky.addColorStop(0,'#24364d');sky.addColorStop(1,'#7f93ab');
+  ctx.fillStyle=sky;ctx.fillRect(0,0,W,horizon);
+  ctx.fillStyle='#1b2836';ctx.fillRect(0,horizon,W,H-horizon);
+  const R=cfg.radius*1000;
+  for(let i=S.all.length-1;i>=0;i--){ // dal più lontano al più vicino
+    const p=S.all[i],dt=angDiff(p.b,head);if(Math.abs(dt)>hf/2+25)continue;
+    const x=xOf(dt),y=yOf(p.el),h=horizon-y;if(h<=0)continue;
+    const half=h/(SLOPE*pxPerDegY/(W/hf));
+    const t=Math.min(1,p.d/R),c=Math.round(40+t*95),c2=Math.round(56+t*100),c3=Math.round(78+t*100);
+    ctx.fillStyle=`rgb(${c},${c2},${c3})`;
+    ctx.beginPath();ctx.moveTo(x-half,horizon);ctx.lineTo(x,y);ctx.lineTo(x+half,horizon);ctx.closePath();ctx.fill();
+  }
+}
+function drawStrip(W,head,hf,xOf,y){
+  ctx.fillStyle='rgba(10,16,24,.55)';ctx.fillRect(0,y-2,W,30);
+  ctx.textAlign='center';
+  for(let a=Math.ceil((head-hf/2)/5)*5;a<=head+hf/2;a+=5){
+    const deg=((a%360)+360)%360,x=xOf(angDiff(deg,head));if(!isFinite(x))continue;
+    const major=deg%45===0;
+    ctx.strokeStyle=major?'#fff':'rgba(255,255,255,.55)';ctx.lineWidth=major?2:1;
+    ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y+(major?10:6));ctx.stroke();
+    if(deg%15===0){ctx.font=(major?'700 13px ':'500 11px ')+'Barlow,system-ui,sans-serif';
+      ctx.fillStyle=deg===0?'#ff4d5e':'#fff';ctx.fillText(major?card(deg):deg+'°',x,y+24)}
+  }
+  ctx.fillStyle='#c8102e';ctx.beginPath();ctx.moveTo(W/2-7,y-2);ctx.lineTo(W/2+7,y-2);ctx.lineTo(W/2,y+8);ctx.fill();
+}
+let lastInfo='';
+function updateInfo(v,head){
+  const dir=`${Math.round(head)}° ${card(head)}`;
+  let n,s;
+  if(S.lat==null){n='Cerco la posizione…';s='Serve il GPS attivo'}
+  else if(!S.raw){n='Carico le vette…';s=`Direzione ${dir}`}
+  else if(v){n=v.p.name;s=`${Math.round(v.p.ele)} m · ${km(v.p.d)} · direzione ${Math.round(v.p.b)}° ${card(v.p.b)}${v.p.hidden?' · probabilmente coperta':''}`}
+  else{n='Nessuna vetta al centro';s=`Stai guardando verso ${dir}`}
+  const k=n+'|'+s;if(k===lastInfo)return;lastInfo=k;
+  $('#infoName').textContent=n;$('#infoSub').textContent=s;
+}
+function loop(){draw();requestAnimationFrame(loop)}
+
+/* ---------- interazione ---------- */
+let drag=null;
+cv.addEventListener('pointerdown',e=>{drag={x:e.clientX,h:S.heading??0,moved:false};cv.setPointerCapture(e.pointerId)});
+cv.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x;if(Math.abs(dx)>6)drag.moved=true;
+  if(S.manual&&drag.moved){S.heading=((drag.h-dx/innerWidth*S.hf)%360+360)%360}});
+cv.addEventListener('pointerup',e=>{if(drag&&!drag.moved)pick(e.clientX,e.clientY);drag=null});
+function pick(x,y){
+  let best=null,bd=1e9;
+  for(const v of S.placed){
+    const inLabel=Math.abs(x-v.x)<v.w/2&&y>=v.y0-4&&y<=v.y0+38;
+    const d=inLabel?0:Math.hypot(x-v.x,y-v.y);
+    if(d<bd&&(inLabel||d<32)){bd=d;best=v}
+  }
+  S.sel=best&&best.p!==S.sel?best.p:null;
+}
+let toastT;function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,4000)}
+
+setInterval(()=>{
+  const parts=[];
+  if(S.status&&!S.raw)parts.push(S.status);
+  if(S.acc!=null)parts.push('GPS ±'+Math.round(S.acc)+' m');
+  if(S.lat!=null)parts.push('quota '+Math.round(obsAlt())+' m');
+  if(S.raw)parts.push(S.peaks.length+' vette');
+  if(S.manual)parts.push('rotazione a mano');
+  $('#status').textContent=parts.join(' · ')||'In attesa';
+},500);
+
+/* ---------- impostazioni ---------- */
+function bindSettings(){
+  const r=$('#radius'),f=$('#fov'),o=$('#offset'),ov=$('#offsetV'),oc=$('#occl'),mn=$('#manual');
+  r.value=cfg.radius;f.value=cfg.fov;o.value=cfg.offset;ov.value=cfg.offsetV;oc.checked=cfg.occl;
+  const out=()=>{$('#fovO').textContent=cfg.fov+'°';$('#offsetO').textContent=(cfg.offset>0?'+':'')+cfg.offset+'°';
+    $('#offsetVO').textContent=(cfg.offsetV>0?'+':'')+cfg.offsetV+'°'};out();
+  r.onchange=()=>{cfg.radius=+r.value;save('vetta-cfg',cfg);if(S.lat!=null){S.raw=null;loadPeaks()}};
+  f.oninput=()=>{cfg.fov=+f.value;out();save('vetta-cfg',cfg)};
+  o.oninput=()=>{cfg.offset=+o.value;out();save('vetta-cfg',cfg)};
+  ov.oninput=()=>{cfg.offsetV=+ov.value;out();save('vetta-cfg',cfg)};
+  oc.onchange=()=>{cfg.occl=oc.checked;save('vetta-cfg',cfg);recompute()};
+  mn.onchange=()=>{S.manual=mn.checked};
+  $('#setBtn').onclick=()=>{mn.checked=S.manual;$('#settings').hidden=false};
+  $('#closeSet').onclick=()=>$('#settings').hidden=true;
+  $('#settings').onclick=e=>{if(e.target.id==='settings')$('#settings').hidden=true};
+  $('#modeBtn').onclick=()=>setMode(S.mode==='cam'?'low':'cam');
+}
+
+/* ---------- avvio ---------- */
+async function start(mode){
+  if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
+    try{await DeviceOrientationEvent.requestPermission()}catch(e){}
+  }
+  $('#start').hidden=true;
+  initOrientation();initGeo();setMode(mode);
+  try{await navigator.wakeLock?.request('screen')}catch(e){}
+  setTimeout(()=>{if(S.lastH==null){S.manual=true;toast('Bussola non disponibile: trascina il panorama per ruotarlo')}},3500);
+  requestAnimationFrame(loop);
+}
+$('#goCam').onclick=()=>start('cam');
+$('#goLow').onclick=()=>start('low');
+bindSettings();
+</script>
+</body>
+</html>
