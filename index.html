@@ -94,6 +94,26 @@ button,select{font:inherit;color:inherit}
 const $=s=>document.querySelector(s);
 const toR=Math.PI/180,toD=180/Math.PI,EARTH=6371000,REFR=0.13,SLOPE=0.4;
 const OVERPASS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
+// Alpi Apuane incorporate: [lat, lon, nome, quota] — disponibili subito, senza rete
+const APUANE=[
+[44.1342,10.2181,'Monte Pisanino',1946],[44.1133,10.2275,'Monte Cavallo',1895],
+[44.0977,10.2461,'Monte Tambura',1891],[44.0347,10.3233,'Pania della Croce',1858],
+[44.1408,10.1797,'Monte Grondilice',1805],[44.1272,10.1889,'Monte Contrario',1789],
+[44.1556,10.1625,'Pizzo d’Uccello',1781],[44.0806,10.2892,'Monte Sumbra',1765],
+[44.1317,10.1219,'Monte Sagro',1753],[44.0983,10.2161,'Monte Alto di Sella',1723],
+[44.0300,10.3194,'Pizzo delle Saette',1720],[44.0864,10.2519,'Monte Fiocca',1711],
+[44.0425,10.3378,'Pania Secca',1709],[44.1100,10.2453,'Roccandagia',1700],
+[44.0381,10.2947,'Monte Corchia',1677],[44.0522,10.2569,'Monte Altissimo',1589],
+[44.0678,10.2853,'Monte Freddone',1487],[44.1556,10.1078,'Monte Borla',1469],
+[43.9922,10.3447,'Monte Matanna',1317],[43.9775,10.3561,'Monte Croce',1314],
+[43.9997,10.3397,'Monte Nona',1297],[43.9403,10.3547,'Monte Piglione',1233],
+[44.0003,10.3264,'Monte Forato',1223],[43.9506,10.3214,'Monte Prana',1220],
+[44.0119,10.3300,'Monte Procinto',1177],[43.9925,10.2958,'Monte Gabberi',1109],
+[44.0658,10.1031,'Monte Brugiana',974]
+];
+let L={top:60,strip:500};
+function layout(){L.top=$('#top').getBoundingClientRect().bottom+8;L.strip=$('#info').getBoundingClientRect().top-30}
+addEventListener('resize',layout);
 const cv=$('#view'),ctx=cv.getContext('2d'),vid=$('#cam');
 
 const cfg=Object.assign({radius:50,fov:55,offset:0,offsetV:0,occl:true},load('vetta-cfg')||{});
@@ -155,7 +175,7 @@ async function onPos(p){
   const moved=S.lat==null||dist(S.lat,S.lon,lat,lon)>1500;
   S.lat=lat;S.lon=lon;S.acc=acc;
   if(alt!=null&&aa!=null&&aa<25)S.gpsAlt=alt;
-  if(moved){await fetchGround();await loadPeaks()}
+  if(moved){loadPeaks();fetchGround().then(recompute)}
 }
 async function fetchGround(){
   try{const r=await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${S.lat}&longitude=${S.lon}`);
@@ -163,9 +183,10 @@ async function fetchGround(){
 }
 async function loadPeaks(){
   const c=load('vetta-peaks');
-  if(c&&c.r===cfg.radius&&Date.now()-c.t<30*864e5&&dist(c.lat,c.lon,S.lat,S.lon)<3000){S.raw=c.e;recompute();return}
-  S.status='Scarico le vette…';
-  const q=`[out:json][timeout:60];node["natural"~"^(peak|volcano)$"]["name"]["ele"](around:${cfg.radius*1000},${S.lat},${S.lon});out;`;
+  const fresh=c&&c.r===cfg.radius&&Date.now()-c.t<30*864e5&&dist(c.lat,c.lon,S.lat,S.lon)<3000;
+  S.raw=mergePeaks(fresh?c.e:[],APUANE);recompute(); // subito a schermo
+  if(fresh)return;
+  const q=`[out:json][timeout:25];node["natural"="peak"]["name"]["ele"](around:${cfg.radius*1000},${S.lat},${S.lon});out;`;
   let els=null;
   for(const url of OVERPASS){
     try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(q)});
@@ -174,16 +195,22 @@ async function loadPeaks(){
       els=j.elements.map(n=>[n.lat,n.lon,n.tags.name,parseEle(n.tags.ele)]).filter(x=>x[3]!=null);break;
     }catch(e){}
   }
-  if(!els){S.status='Vette non scaricate: controlla la connessione';return}
+  if(!els)return; // restano le vette incorporate
   save('vetta-peaks',{t:Date.now(),lat:S.lat,lon:S.lon,r:cfg.radius,e:els});
-  S.raw=els;recompute();
+  S.raw=mergePeaks(els,APUANE);recompute();
+}
+// i dati OSM hanno la precedenza; le vette incorporate si aggiungono se mancano
+function mergePeaks(osm,emb){
+  const out=osm.slice();
+  for(const e of emb)if(!osm.some(o=>dist(o[0],o[1],e[0],e[1])<800))out.push(e);
+  return out;
 }
 function recompute(){
   if(!S.raw||S.lat==null)return;
   const h0=obsAlt();
   const list=[];
   for(const [la,lo,name,ele] of S.raw){
-    const d=dist(S.lat,S.lon,la,lo);if(d<150)continue;
+    const d=dist(S.lat,S.lon,la,lo);if(d<150||d>cfg.radius*1000)continue;
     const drop=d*d/(2*EARTH)*(1-REFR); // curvatura terrestre e rifrazione
     list.push({name,ele,d,b:bearing(S.lat,S.lon,la,lo),el:Math.atan2(ele-h0-drop,d)*toD,hidden:false});
   }
@@ -216,8 +243,7 @@ function draw(){
   const low=S.mode==='low';
   const head=((S.heading??0)+cfg.offset+360)%360;
   const hf=low?80:cfg.fov;S.hf=hf;
-  const topY=$('#top').getBoundingClientRect().bottom+8;
-  const stripY=$('#info').getBoundingClientRect().top-30;
+  const topY=L.top,stripY=L.strip;
 
   let xOf,yOf,horizon;
   if(low){
@@ -243,9 +269,9 @@ function draw(){
   // posizionamento etichette su righe senza sovrapposizioni
   const rowH=38,rows=[],placed=[];
   const maxRows=Math.max(1,Math.floor((stripY-topY)*0.55/rowH));
+  ctx.font='700 16px "Barlow Condensed","Arial Narrow",sans-serif';
   for(const v of vis){
     if(placed.length>=40)break;
-    ctx.font='700 16px '+getComputedStyle(document.documentElement).getPropertyValue('--cond');
     const w=Math.max(ctx.measureText(v.p.name).width,70)+12;
     let r=0,ok=false;
     for(;r<maxRows;r++){const y=topY+r*rowH;if(y+rowH>v.y-4)break;
@@ -311,7 +337,7 @@ function updateInfo(v,head){
   else if(v){n=v.p.name;s=`${Math.round(v.p.ele)} m · ${km(v.p.d)} · direzione ${Math.round(v.p.b)}° ${card(v.p.b)}${v.p.hidden?' · probabilmente coperta':''}`}
   else{n='Nessuna vetta al centro';s=`Stai guardando verso ${dir}`}
   const k=n+'|'+s;if(k===lastInfo)return;lastInfo=k;
-  $('#infoName').textContent=n;$('#infoSub').textContent=s;
+  $('#infoName').textContent=n;$('#infoSub').textContent=s;layout();
 }
 function loop(){draw();requestAnimationFrame(loop)}
 
@@ -365,7 +391,7 @@ async function start(mode){
   if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
     try{await DeviceOrientationEvent.requestPermission()}catch(e){}
   }
-  $('#start').hidden=true;
+  $('#start').hidden=true;layout();
   initOrientation();initGeo();setMode(mode);
   try{await navigator.wakeLock?.request('screen')}catch(e){}
   setTimeout(()=>{if(S.lastH==null){S.manual=true;toast('Bussola non disponibile: trascina il panorama per ruotarlo')}},3500);
