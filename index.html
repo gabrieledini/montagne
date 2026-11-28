@@ -121,6 +121,7 @@ const APUANE=[
 let L={top:60,strip:500};
 function layout(){L.top=$('#top').getBoundingClientRect().bottom+8;L.strip=$('#info').getBoundingClientRect().top-30}
 addEventListener('resize',layout);
+addEventListener('orientationchange',()=>setTimeout(layout,300));
 const cv=$('#view'),ctx=cv.getContext('2d'),vid=$('#cam');
 
 const cfg=Object.assign({radius:50,fov:55,offset:0,offsetV:0,occl:true},load('vetta-cfg')||{});
@@ -249,7 +250,9 @@ function draw(){
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
   const low=S.mode==='low';
   const head=((S.heading??0)+cfg.offset+360)%360;
-  const hf=low?80:cfg.fov;S.hf=hf;
+  // cfg.fov è riferito al lato corto dello schermo: in orizzontale il campo si allarga
+  const land=W>H;
+  const hf=low?(land?120:80):(land?2*Math.atan(Math.tan(cfg.fov/2*toR)*W/H)*toD:cfg.fov);S.hf=hf;
   const topY=L.top,stripY=L.strip;
 
   let xOf,yOf,horizon;
